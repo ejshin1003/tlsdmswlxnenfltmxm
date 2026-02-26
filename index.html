@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A Piece of Life</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @font-face {
+            font-family: 'MyCustomFont';
+            src: url('./your-font-file.ttf') format('truetype');
+        }
+
+        :root {
+            --bg-color: #fcfaf7;
+            --card-bg: #ffffff;
+            --text-main: #333;
+            --text-sub: #999;
+            --point: #ffb7b2;
+            --faded: #e0ddd9;
+        }
+
+        body {
+            font-family: 'MyCustomFont', sans-serif;
+            background-color: var(--bg-color);
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+            letter-spacing: -1px;
+            line-height: 1.25;
+        }
+
+        .container { width: 100%; max-width: 380px; }
+        header h1 { text-align: center; font-size: 1.5rem; margin-bottom: 15px; color: #777; font-weight: normal; }
+
+        /* Search Bar */
+        .search-box {
+            width: 100%; margin-bottom: 20px;
+            border: none; border-bottom: 1px solid var(--faded);
+            background: transparent; padding: 8px;
+            font-family: inherit; font-size: 0.9rem; outline: none;
+            color: var(--text-main);
+        }
+
+        .todo-card {
+            background: var(--card-bg); border-radius: 20px; padding: 18px;
+            margin-bottom: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.02);
+            border: 1px solid #f2f0ee;
+        }
+
+        .card-header {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .title-group { display: flex; flex-direction: column; }
+        .card-title { font-size: 1.15rem; color: #111; font-weight: bold; }
+        .created-date { font-size: 0.7rem; color: #ccc; margin-top: 2px; }
+
+        .todo-item { display: flex; align-items: flex-start; margin-bottom: 12px; cursor: pointer; }
+        .heart-box { font-size: 1.1rem; margin-right: 8px; margin-top: 2px; }
+
+        .content-wrapper { display: flex; flex-direction: column; flex: 1; }
+        .main-text { font-size: 1.05rem; color: var(--text-main); }
+        .sub-memo { font-size: 0.85rem; color: var(--text-sub); margin-top: 2px; white-space: pre-wrap; }
+        
+        .done .main-text, .done .sub-memo { text-decoration: line-through; opacity: 0.4; }
+        .date-badge { font-size: 0.7rem; color: var(--point); margin-left: 5px; text-decoration: none !important; }
+
+        .btn-group button { font-size: 0.7rem; color: #ccc; border: none; background: none; cursor: pointer; margin-left: 4px; font-family: inherit; }
+        .btn-group button:hover { color: var(--point); }
+
+        .add-btn {
+            position: fixed; bottom: 30px; width: 55px; height: 55px; border-radius: 50%;
+            background: var(--point); color: white; font-size: 2rem;
+            display: flex; justify-content: center; align-items: center; border: none;
+            box-shadow: 0 4px 15px rgba(255, 183, 178, 0.4); cursor: pointer;
+        }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.15); justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: white; padding: 20px; border-radius: 20px; width: 85%; max-width: 340px; }
+        
+        .input-tools { margin-bottom: 10px; display: flex; gap: 5px; }
+        .tool-btn { 
+            background: #f0f0f0; border: none; padding: 5px 12px; border-radius: 8px; 
+            font-family: inherit; font-size: 0.85rem; cursor: pointer; color: #555;
+        }
+
+        input, textarea { 
+            width: 100%; border: 1px solid #eee; padding: 12px; border-radius: 12px; 
+            font-family: inherit; margin-bottom: 10px; box-sizing: border-box; font-size: 1rem;
+        }
+        
+        .praise { text-align: center; color: var(--point); font-size: 0.9rem; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header><h1>A Piece of Life</h1></header>
+        
+        <input type="text" class="search-box" id="search-input" placeholder="Search your pieces..." oninput="render()">
+
+        <div id="list-container"></div>
+    </div>
+
+    <button class="add-btn" onclick="openModal()">+</button>
+
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0; font-size: 1.1rem; color:#444;">Record a Piece</h3>
+            <input type="text" id="title-input" placeholder="Category Name">
+            
+            <div class="input-tools">
+                <button class="tool-btn" onclick="addCheckTag()">+ Add Checklist</button>
+            </div>
+            
+            <textarea id="text-input" rows="10" placeholder="Type your tasks here..."></textarea>
+            
+            <div style="display:flex; gap:10px;">
+                <button onclick="save()" style="background:var(--point); color:white; padding:12px; border-radius:12px; border:none; flex:2; font-family:inherit; cursor:pointer;">Save</button>
+                <button onclick="closeModal()" style="flex:1; border:none; background:none; color:#aaa; font-family:inherit; cursor:pointer;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let groups = JSON.parse(localStorage.getItem('slices_v5')) || [];
+        let editId = null;
+
+        function addCheckTag() {
+            const textarea = document.getElementById('text-input');
+            const start = textarea.selectionStart;
+            const text = textarea.value;
+            textarea.value = text.substring(0, start) + (text.length > 0 ? "\n" : "") + "☑️ " + text.substring(start);
+            textarea.focus();
+        }
+
+        function openModal(id = null) {
+            editId = id;
+            if(id) {
+                const g = groups.find(x => x.id === id);
+                document.getElementById('title-input').value = g.title;
+                document.getElementById('text-input').value = g.raw;
+            } else {
+                document.getElementById('title-input').value = '';
+                document.getElementById('text-input').value = '';
+            }
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+        function save() {
+            const title = document.getElementById('title-input').value || 'Piece';
+            const raw = document.getElementById('text-input').value;
+            const parts = raw.split('☑️').filter(p => p.trim());
+            const items = parts.map(part => {
+                const lines = part.split('\n').filter(l => l.trim());
+                return { main: lines[0], sub: lines.slice(1).join('\n'), done: false, date: '' };
+            });
+
+            if(editId) {
+                const i = groups.findIndex(x => x.id === editId);
+                groups[i] = { ...groups[i], title, raw, items };
+            } else {
+                const now = new Date();
+                const createdDate = `${now.getFullYear()}.${now.getMonth()+1}.${now.getDate()}`;
+                groups.push({ id: Date.now(), title, raw, items, createdDate });
+            }
+            render();
+            closeModal();
+        }
+
+        function toggle(gId, iIdx) {
+            const g = groups.find(x => x.id === gId);
+            const item = g.items[iIdx];
+            item.done = !item.done;
+            if(item.done) {
+                const d = new Date();
+                item.date = `${d.getMonth()+1}/${d.getDate()}`;
+            }
+            render();
+        }
+
+        async function share(id) {
+            const el = document.getElementById(`card-${id}`);
+            const menu = el.querySelector('.btn-group');
+            menu.style.opacity = '0';
+            const canvas = await html2canvas(el, { backgroundColor: '#fcfaf7', scale: 2 });
+            const link = document.createElement('a');
+            link.download = `Piece-${id}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+            menu.style.opacity = '1';
+        }
+
+        function del(id) { if(confirm('Are you sure to delete this piece? :(')) { groups = groups.filter(x => x.id !== id); render(); } }
+
+        function render() {
+            localStorage.setItem('slices_v5', JSON.stringify(groups));
+            const container = document.getElementById('list-container');
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            container.innerHTML = '';
+
+            groups.forEach(g => {
+                // Search Logic (Category or Items)
+                const hasMatch = g.title.toLowerCase().includes(searchTerm) || 
+                                 g.raw.toLowerCase().includes(searchTerm);
+                if (!hasMatch && searchTerm !== "") return;
+
+                const isAllDone = g.items.length > 0 && g.items.every(i => i.done);
+                const card = document.createElement('div');
+                card.className = 'todo-card';
+                card.id = `card-${g.id}`;
+                
+                let itemsHtml = g.items.map((item, idx) => `
+                    <div class="todo-item ${item.done ? 'done' : ''}" onclick="toggle(${g.id}, ${idx})">
+                        <div class="heart-box">${item.done ? '❤️' : '🤍'}</div>
+                        <div class="content-wrapper">
+                            <div class="main-text">${item.main}${item.done ? `<span class="date-badge">${item.date}</span>` : ''}</div>
+                            ${item.sub ? `<div class="sub-memo">${item.sub}</div>` : ''}
+                        </div>
+                    </div>
+                `).join('');
+
+                card.innerHTML = `
+                    <div class="card-header">
+                        <div class="title-group">
+                            <div class="card-title">${g.title}</div>
+                            <div class="created-date">Created at ${g.createdDate || 'Recently'}</div>
+                        </div>
+                        <div class="btn-group">
+                            <button onclick="event.stopPropagation(); share(${g.id})">Share</button>
+                            <button onclick="event.stopPropagation(); openModal(${g.id})">Edit</button>
+                            <button onclick="event.stopPropagation(); del(${g.id})">Del</button>
+                        </div>
+                    </div>
+                    ${itemsHtml}
+                    ${isAllDone ? '<div class="praise"> 수고했어요 ! 🌟</div>' : ''}
+                `;
+                container.appendChild(card);
+            });
+        }
+        render();
+    </script>
+</body>
+</html>
